@@ -8,6 +8,8 @@ import (
   "os"
   "strings"
   "crypto/rand"
+  
+  log "github.com/sirupsen/logrus"
 )
 
 var devices = make(map[string]map[string]net.Conn)
@@ -17,7 +19,7 @@ func pseudoUuid() (uuid string) {
     b := make([]byte, 16)
     _, err := rand.Read(b)
     if err != nil {
-        fmt.Println("Error: ", err)
+        log.Info("Error: ", err)
         return
     }
 
@@ -40,28 +42,28 @@ func handleConnection(connection net.Conn) {
   
   defer func() {
     if closeConn {
-      fmt.Println("Closing connection...")
+      log.Info("Closing connection...")
       connection.Close()
     }
   }()
 
-  fmt.Println("Handling connection...")
+  log.Info("Handling connection...")
   reader := bufio.NewReader(connection)
   cmd := readTrimmedLine(reader)
   address := readTrimmedLine(reader)
-  fmt.Println("Command " + cmd + " from: " + address)
+  log.Info("Command " + cmd + " from: " + address)
 
   switch cmd {
     case "0":
-      fmt.Println("Adding device...")
+      log.Info("Adding device...")
       devices[address] = make(map[string]net.Conn)
 
     case "1":
-      fmt.Println("Removing device...")
+      log.Info("Removing device...")
       delete(devices, address)
 
     case "2":
-      fmt.Println("Sending devices...")
+      log.Info("Sending devices...")
       writer := bufio.NewWriter(connection)
       for addr, services := range devices {
         if addr != address {
@@ -70,55 +72,57 @@ func handleConnection(connection net.Conn) {
             entry += "," + uuid
           }
           entry += "\n"
-          fmt.Print(entry)
+          log.Print(entry)
           writer.WriteString(entry)
         }
       }
       writer.Flush()
 
     case "3":
-          fmt.Println("Adding service...")
+          log.Info("Adding service...")
           uuid := readTrimmedLine(reader)
-          fmt.Println(uuid)
+          log.Info(uuid)
           devices[address][uuid] = connection
+          log.Info("Keeping listener connection...")
           closeConn = false
 
     case "4":
-          fmt.Println("Removing service...")
+          log.Info("Removing service...")
           uuid := readTrimmedLine(reader)
-          fmt.Println(uuid)
+          log.Info(uuid)
           listenerConnection := devices[address][uuid]
 
           defer func() {
-            fmt.Println("Closing client connection...")
+            log.Info("Closing listener connection...")
             listenerConnection.Close()
           }()
 
           delete(devices[address], uuid)
 
     case "5":
-          fmt.Println("Establishing connection...")
+          log.Info("Establishing connection...")
           addr := readTrimmedLine(reader)
-          fmt.Println(addr)
+          log.Info(addr)
           uuid := readTrimmedLine(reader)
-          fmt.Println(uuid)
+          log.Info(uuid)
           connId := pseudoUuid()
-          fmt.Println(connId)
+          log.Info(connId)
           writer := bufio.NewWriter(devices[addr][uuid])
           writer.WriteString(address + "\n")
           writer.WriteString(connId + "\n")
           writer.Flush()
           connections[connId] = connection
+          log.Info("Keeping client connection...")
           closeConn = false
 
     case "6":
-          fmt.Println("Linking connection...")
+          log.Info("Linking connection...")
           connId := readTrimmedLine(reader)
           clientConnection := connections[connId]
-          fmt.Println(connId)
+          log.Info(connId)
 
           defer func() {
-            fmt.Println("Closing client connection...")
+            log.Info("Closing client connection...")
             clientConnection.Close()
             delete(connections, connId)
           }()
@@ -128,51 +132,51 @@ func handleConnection(connection net.Conn) {
           writer := bufio.NewWriter(connection)
 
           go func() {
-            fmt.Println("Write from client to server...")
+            log.Info("Write from client to server...")
             clientReader.WriteTo(writer)
-            fmt.Println("Write from client to server done.")
+            log.Info("Write from client to server done.")
           }()
           
-          fmt.Println("Write from server to client...")
+          log.Info("Write from server to client...")
           reader.WriteTo(clientWriter)
-          fmt.Println("Write from server to client done.")
+          log.Info("Write from server to client done.")
     
     default:
-      fmt.Println("Unknown command...")
+      log.Info("Unknown command...")
       for {
         line, err := reader.ReadString('\n')
         if err != nil && err != io.EOF {
-          fmt.Println(err)
+          log.Info(err)
           break
         }
-        fmt.Print(line)
+        log.Print(line)
       }
   }
 }
 
 func main() {
   if len(os.Args) == 1 {
-    fmt.Println("Please provide a port number!")
+    log.Info("Please provide a port number!")
     return
   }
   port := ":" + os.Args[1]
 
   listener, err := net.Listen("tcp4", port)
   if err != nil {
-    fmt.Println(err)
+    log.Info(err)
     return
   }
 
   defer func() {
-    fmt.Println("Stop listening...")
+    log.Info("Stop listening...")
     listener.Close()
   }()
 
   for {
-    fmt.Println("Waiting for connections...")
+    log.Info("Waiting for connections...")
     connection, err := listener.Accept()
     if err != nil {
-      fmt.Println(err)
+      log.Info(err)
       return
     }
     go handleConnection(connection)
