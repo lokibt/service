@@ -1,13 +1,12 @@
 package main
 
 import (
-  "io"
   "bufio"
-  "fmt"
+  "io"
   "net"
   "os"
   "strings"
-  "crypto/rand"
+  "strconv"
   "syscall"
   "time"
   
@@ -18,16 +17,7 @@ var devices = make(map[string]map[string]net.Conn)
 var listening = 0;
 var connections = make(map[string]net.Conn)
 var active = 0;
-
-// See https://stackoverflow.com/a/25736155
-func pseudoUuid() (string) {
-    b := make([]byte, 16)
-    _, err := rand.Read(b)
-    if err != nil {
-      log.Panic(err)
-    }
-    return fmt.Sprintf("%X-%X-%X-%X-%X", b[0:4], b[4:6], b[6:8], b[8:10], b[10:])
-}
+var nextConnId = 0
 
 // See https://stackoverflow.com/a/58664631
 func connCheck(conn net.Conn) error {
@@ -53,6 +43,11 @@ func connCheck(conn net.Conn) error {
       return err
     }
     return sysErr
+}
+
+func getConnectionId() (string) {
+  nextConnId++
+  return strconv.Itoa(nextConnId)
 }
 
 func readTrimmedLine(reader *bufio.Reader) string {
@@ -135,7 +130,7 @@ func handleConnection(connection net.Conn) {
       clog.Debug(addr)
       uuid := readTrimmedLine(reader)
       clog.Debug(uuid)
-      connId := pseudoUuid()
+      connId := getConnectionId()
       clog.Debug(connId)
 
       connections[connId] = connection
