@@ -9,12 +9,15 @@ import (
   "strings"
   "crypto/rand"
   "syscall"
+  "time"
   
   log "github.com/sirupsen/logrus"
 )
 
 var devices = make(map[string]map[string]net.Conn)
+var listening = 0;
 var connections = make(map[string]net.Conn)
+var active = 0;
 
 // See https://stackoverflow.com/a/25736155
 func pseudoUuid() (string) {
@@ -65,7 +68,7 @@ func handleConnection(connection net.Conn) {
   var clog *log.Entry
 
   defer func() {
-    clog.Info("closing connection...")
+    clog.Debug("closing connection...")
     connection.Close()
   }()
 
@@ -76,19 +79,19 @@ func handleConnection(connection net.Conn) {
     "address": address,
     "cmd": cmd,
   })
-  clog.Info("command received")
+  clog.Debug("command received")
 
   switch cmd {
     case "0":
-      clog.Info("adding device...")
+      clog.Debug("adding device...")
       devices[address] = make(map[string]net.Conn)
 
     case "1":
-      clog.Info("removing device...")
+      clog.Debug("removing device...")
       delete(devices, address)
 
     case "2":
-      clog.Info("sending devices...")
+      clog.Debug("sending devices...")
       writer := bufio.NewWriter(connection)
       for addr, services := range devices {
         if addr != address {
@@ -97,43 +100,46 @@ func handleConnection(connection net.Conn) {
             entry += "," + uuid
           }
           entry += "\n"
-          log.Debug(entry)
+          clog.Debug(entry)
           writer.WriteString(entry)
         }
       }
       writer.Flush()
 
     case "3":
-          clog.Info("adding service...")
+          clog.Debug("adding service...")
           uuid := readTrimmedLine(reader)
-          log.Debug(uuid)
+          clog.Debug(uuid)
 
           devices[address][uuid] = connection
           defer func() {
-            clog.Info("removing service...")
+            clog.Debug("removing service...")
             delete(devices[address], uuid)
           }()
 
-          clog.Info("keeping listener connection...")
+          listening++
+          defer func() {listening--}()
+
+          clog.Debug("keeping listener connection...")
           for {
             if (connCheck(connection) != nil) {
-              clog.Info("listener connection closed");
+              clog.Debug("listener connection closed");
               break;
             }
           }
 
     case "5":
-          clog.Info("adding client connection...")
+          clog.Debug("adding client connection...")
           addr := readTrimmedLine(reader)
-          log.Debug(addr)
+          clog.Debug(addr)
           uuid := readTrimmedLine(reader)
-          log.Debug(uuid)
+          clog.Debug(uuid)
           connId := pseudoUuid()
-          log.Debug(connId)
+          clog.Debug(connId)
 
           connections[connId] = connection
           defer func() {
-            clog.Info("removing client connection...")
+            clog.Debug("removing client connection...")
             delete(connections, connId)
           }()
 
@@ -142,24 +148,27 @@ func handleConnection(connection net.Conn) {
           writer.WriteString(connId + "\n")
           writer.Flush()
 
-          clog.Info("keeping client connection...")
+          clog.Debug("keeping client connection...")
           for {
             if (connCheck(connection) != nil) {
-              clog.Info("client connection closed");
+              clog.Debug("client connection closed");
               break;
             }
           }
 
     case "6":
-          clog.Info("linking client connection...")
+          clog.Debug("linking client connection...")
           connId := readTrimmedLine(reader)
-          log.Debug(connId)
+          clog.Debug(connId)
 
           clientConnection := connections[connId]
           defer func() {
-            clog.Info("closing client connection...")
+            clog.Debug("closing client connection...")
             clientConnection.Close()
           }()
+
+          active++
+          defer func() {active--}()
           
           // There seem to be situations where neither of the following
           // functions ever return, even though the connections have been
@@ -171,51 +180,63 @@ func handleConnection(connection net.Conn) {
 
           go func() {
             defer func() { writeDone <- true }()
-            clog.Info("writing from client to server...")
+            clog.Debug("writing from client to server...")
             writer := bufio.NewWriter(connection)
             clientReader := bufio.NewReader(clientConnection)
             clientReader.WriteTo(writer)
-            clog.Info("writing from client to server done")
+            clog.Debug("writing from client to server done")
           }()
 
           go func() {
             defer func() { writeDone <- true }()
-            clog.Info("writing from server to client...")
+            clog.Debug("writing from server to client...")
             clientWriter := bufio.NewWriter(clientConnection)
             reader.WriteTo(clientWriter)
-            clog.Info("writing from server to client done")
+            clog.Debug("writing from server to client done")
           }()
 
           <-writeDone
 
     default:
-      clog.warn("unknown command...")
+      clog.Warn("unknown command...")
   }
 }
 
 func main() {
-  if len(os.Args) == 1 {
-    fmt.Println("Please provide a port number!")
-    return
+  if len(os.Args) >= 2 && os.Args[1] == "--debug" {
+    log.SetLevel(log.DebugLevel)
   }
-  port := ":" + os.Args[1]
 
-  listener, err := net.Listen("tcp4", port)
+  ticker := time.NewTicker(5 * time.Minute)
+  go func() {
+    for {
+        <- ticker.C
+        log.WithFields(log.Fields{
+          "devices": len(devices),
+          "listening": listening,
+          "connections": len(connections),
+          "active": active,
+        }).Info("statistics");
+    }
+   }()
+
+  log.Info("starting service...")
+
+  listener, err := net.Listen("tcp4", ":8199")
   if err != nil {
-    log.Info(err)
+    log.Fatal(err)
     return
   }
 
   defer func() {
-    log.Info("stop listening...")
+    log.Info("stopping service...")
     listener.Close()
   }()
 
-  log.Info("start listening...")
   for {
     connection, err := listener.Accept()
     if err != nil {
-      log.Info(err)
+      log.Error(err)
       return
     }
     go handleConnection(connection)
