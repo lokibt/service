@@ -8,6 +8,7 @@ import (
   "os"
   "strings"
   "crypto/rand"
+  "syscall"
   
   log "github.com/sirupsen/logrus"
 )
@@ -28,6 +29,29 @@ func pseudoUuid() (uuid string) {
     return
 }
 
+// See https://stackoverflow.com/a/58664631
+func connCheck(conn net.Conn) error {
+    var sysErr error = nil
+    rc, err := conn.(syscall.Conn).SyscallConn()
+    if err != nil { return err }
+    err = rc.Read(func(fd uintptr) bool {
+        var buf []byte = []byte{0}
+        n, _, err := syscall.Recvfrom(int(fd), buf, syscall.MSG_PEEK | syscall.MSG_DONTWAIT)
+        switch {
+        case n == 0 && err == nil:
+            sysErr = io.EOF
+        case err == syscall.EAGAIN || err == syscall.EWOULDBLOCK:
+            sysErr = nil
+        default:
+            sysErr = err
+        }
+        return true
+    })
+    if err != nil { return err }
+
+    return sysErr
+}
+
 func readTrimmedLine(reader *bufio.Reader) string {
     line, err := reader.ReadString('\n')
     if err != nil {
@@ -38,16 +62,12 @@ func readTrimmedLine(reader *bufio.Reader) string {
 }
 
 func handleConnection(connection net.Conn) {
-  closeConn := true
   
   defer func() {
-    if closeConn {
-      log.Info("Closing connection...")
-      connection.Close()
-    }
+    log.Info("Closing connection...")
+    connection.Close()
   }()
 
-  log.Info("Handling connection...")
   reader := bufio.NewReader(connection)
   cmd := readTrimmedLine(reader)
   address := readTrimmedLine(reader)
@@ -83,10 +103,21 @@ func handleConnection(connection net.Conn) {
           uuid := readTrimmedLine(reader)
           log.Info(uuid)
           devices[address][uuid] = connection
-          log.Info("Keeping listener connection...")
-          closeConn = false
 
-    case "4":
+          defer func() {
+            log.Info("Removing service...")
+            delete(devices[address], uuid)
+          }()
+
+          log.Info("Keeping listener connection...")
+          for {
+            if (connCheck(connection) != nil) {
+              log.Info("Bluetooth server closed listener connection.");
+              break;
+            }
+          }
+
+    /*case "4":
           log.Info("Removing service...")
           uuid := readTrimmedLine(reader)
           log.Info(uuid)
@@ -97,7 +128,7 @@ func handleConnection(connection net.Conn) {
             listenerConnection.Close()
           }()
 
-          delete(devices[address], uuid)
+          delete(devices[address], uuid)*/
 
     case "5":
           log.Info("Establishing connection...")
@@ -112,8 +143,13 @@ func handleConnection(connection net.Conn) {
           writer.WriteString(connId + "\n")
           writer.Flush()
           connections[connId] = connection
-          log.Info("Keeping client connection...")
-          closeConn = false
+
+          for {
+            if (connCheck(connection) != nil) {
+              log.Info("Bluetooth client closed connection");
+              break;
+            }
+          }
 
     case "6":
           log.Info("Linking connection...")
@@ -132,14 +168,27 @@ func handleConnection(connection net.Conn) {
           writer := bufio.NewWriter(connection)
 
           go func() {
-            log.Info("Write from client to server...")
+            log.Info("Write from Bluetooth client to server...")
             clientReader.WriteTo(writer)
-            log.Info("Write from client to server done.")
+            log.Info("Write from Bluetooth client to server done.")
           }()
           
-          log.Info("Write from server to client...")
-          reader.WriteTo(clientWriter)
-          log.Info("Write from server to client done.")
+          go func() {
+            log.Info("Write from Bluetooth server to client...")
+            reader.WriteTo(clientWriter)
+            log.Info("Write from Bluetooth server to client done.")
+          }()
+
+          for {
+            if (connCheck(connection) != nil) {
+              log.Info("Bluetooth server closed linked connection");
+              break;
+            }
+            if (connCheck(clientConnection) != nil) {
+              log.Info("Bluetooth client closed linked connection");
+              break;
+            }
+          }
     
     default:
       log.Info("Unknown command...")
@@ -172,8 +221,8 @@ func main() {
     listener.Close()
   }()
 
+  log.Info("Start listening...")
   for {
-    log.Info("Waiting for connections...")
     connection, err := listener.Accept()
     if err != nil {
       log.Info(err)
