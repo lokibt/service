@@ -16,74 +16,79 @@ import (
 var devices = make(map[string]map[string]net.Conn)
 var connections = make(map[string]net.Conn)
 
-func pseudoUuid() (uuid string) {
+// See https://stackoverflow.com/a/25736155
+func pseudoUuid() (string) {
     b := make([]byte, 16)
     _, err := rand.Read(b)
     if err != nil {
-        log.Info("Error: ", err)
-        return
+        log.Panic(err)
     }
-
-    uuid = fmt.Sprintf("%X-%X-%X-%X-%X", b[0:4], b[4:6], b[6:8], b[8:10], b[10:])
-
-    return
+    return fmt.Sprintf("%X-%X-%X-%X-%X", b[0:4], b[4:6], b[6:8], b[8:10], b[10:])
 }
 
 // See https://stackoverflow.com/a/58664631
 func connCheck(conn net.Conn) error {
     var sysErr error = nil
     rc, err := conn.(syscall.Conn).SyscallConn()
-    if err != nil { return err }
+    if err != nil {
+      return err
+    }
     err = rc.Read(func(fd uintptr) bool {
         var buf []byte = []byte{0}
         n, _, err := syscall.Recvfrom(int(fd), buf, syscall.MSG_PEEK | syscall.MSG_DONTWAIT)
         switch {
-        case n == 0 && err == nil:
+          case n == 0 && err == nil:
             sysErr = io.EOF
-        case err == syscall.EAGAIN || err == syscall.EWOULDBLOCK:
+          case err == syscall.EAGAIN || err == syscall.EWOULDBLOCK:
             sysErr = nil
-        default:
+          default:
             sysErr = err
         }
         return true
     })
-    if err != nil { return err }
-
+    if err != nil {
+      return err
+    }
     return sysErr
 }
 
 func readTrimmedLine(reader *bufio.Reader) string {
     line, err := reader.ReadString('\n')
     if err != nil {
-      panic(err)
+      log.Panic(err)
     }
     line = strings.TrimSpace(string(line))
     return line
 }
 
 func handleConnection(connection net.Conn) {
-  
+  var clog *log.Entry
+
   defer func() {
-    log.Info("Closing connection...")
+    clog.Info("closing connection...")
     connection.Close()
   }()
 
   reader := bufio.NewReader(connection)
   cmd := readTrimmedLine(reader)
   address := readTrimmedLine(reader)
-  log.Info("Command " + cmd + " from: " + address)
+  clog = log.WithFields(log.Fields{
+    "address": address,
+    "cmd": cmd,
+  })
+  clog.Info("command received")
 
   switch cmd {
     case "0":
-      log.Info("Adding device...")
+      clog.Info("adding device...")
       devices[address] = make(map[string]net.Conn)
 
     case "1":
-      log.Info("Removing device...")
+      clog.Info("removing device...")
       delete(devices, address)
 
     case "2":
-      log.Info("Sending devices...")
+      clog.Info("sending devices...")
       writer := bufio.NewWriter(connection)
       for addr, services := range devices {
         if addr != address {
@@ -92,120 +97,105 @@ func handleConnection(connection net.Conn) {
             entry += "," + uuid
           }
           entry += "\n"
-          log.Print(entry)
+          log.Debug(entry)
           writer.WriteString(entry)
         }
       }
       writer.Flush()
 
     case "3":
-          log.Info("Adding service...")
+          clog.Info("adding service...")
           uuid := readTrimmedLine(reader)
-          log.Info(uuid)
-          devices[address][uuid] = connection
+          log.Debug(uuid)
 
+          devices[address][uuid] = connection
           defer func() {
-            log.Info("Removing service...")
+            clog.Info("removing service...")
             delete(devices[address], uuid)
           }()
 
-          log.Info("Keeping listener connection...")
+          clog.Info("keeping listener connection...")
           for {
             if (connCheck(connection) != nil) {
-              log.Info("Bluetooth server closed listener connection.");
+              clog.Info("listener connection closed");
               break;
             }
           }
 
-    /*case "4":
-          log.Info("Removing service...")
+    case "5":
+          clog.Info("adding client connection...")
+          addr := readTrimmedLine(reader)
+          log.Debug(addr)
           uuid := readTrimmedLine(reader)
-          log.Info(uuid)
-          listenerConnection := devices[address][uuid]
+          log.Debug(uuid)
+          connId := pseudoUuid()
+          log.Debug(connId)
 
+          connections[connId] = connection
           defer func() {
-            log.Info("Closing listener connection...")
-            listenerConnection.Close()
+            clog.Info("removing client connection...")
+            delete(connections, connId)
           }()
 
-          delete(devices[address], uuid)*/
-
-    case "5":
-          log.Info("Establishing connection...")
-          addr := readTrimmedLine(reader)
-          log.Info(addr)
-          uuid := readTrimmedLine(reader)
-          log.Info(uuid)
-          connId := pseudoUuid()
-          log.Info(connId)
           writer := bufio.NewWriter(devices[addr][uuid])
           writer.WriteString(address + "\n")
           writer.WriteString(connId + "\n")
           writer.Flush()
-          connections[connId] = connection
 
+          clog.Info("keeping client connection...")
           for {
             if (connCheck(connection) != nil) {
-              log.Info("Bluetooth client closed connection");
+              clog.Info("client connection closed");
               break;
             }
           }
 
     case "6":
-          log.Info("Linking connection...")
+          clog.Info("linking client connection...")
           connId := readTrimmedLine(reader)
+          log.Debug(connId)
+
           clientConnection := connections[connId]
-          log.Info(connId)
-
           defer func() {
-            log.Info("Closing client connection...")
+            clog.Info("closing client connection...")
             clientConnection.Close()
-            delete(connections, connId)
           }()
           
-          clientReader := bufio.NewReader(clientConnection)
-          clientWriter := bufio.NewWriter(clientConnection)
-          writer := bufio.NewWriter(connection)
+          // There seem to be situations where neither of the following
+          // functions ever return, even though the connections have been
+          // closed on the emulator side. This should be investigated further.
+          // However, the functions return at least, if the app that has created
+          // the connection has been stopped. So it's not critical.
+
+          writeDone := make(chan bool)
 
           go func() {
-            log.Info("Write from Bluetooth client to server...")
+            defer func() { writeDone <- true }()
+            clog.Info("writing from client to server...")
+            writer := bufio.NewWriter(connection)
+            clientReader := bufio.NewReader(clientConnection)
             clientReader.WriteTo(writer)
-            log.Info("Write from Bluetooth client to server done.")
-          }()
-          
-          go func() {
-            log.Info("Write from Bluetooth server to client...")
-            reader.WriteTo(clientWriter)
-            log.Info("Write from Bluetooth server to client done.")
+            clog.Info("writing from client to server done")
           }()
 
-          for {
-            if (connCheck(connection) != nil) {
-              log.Info("Bluetooth server closed linked connection");
-              break;
-            }
-            if (connCheck(clientConnection) != nil) {
-              log.Info("Bluetooth client closed linked connection");
-              break;
-            }
-          }
-    
+          go func() {
+            defer func() { writeDone <- true }()
+            clog.Info("writing from server to client...")
+            clientWriter := bufio.NewWriter(clientConnection)
+            reader.WriteTo(clientWriter)
+            clog.Info("writing from server to client done")
+          }()
+
+          <-writeDone
+
     default:
-      log.Info("Unknown command...")
-      for {
-        line, err := reader.ReadString('\n')
-        if err != nil && err != io.EOF {
-          log.Info(err)
-          break
-        }
-        log.Print(line)
-      }
+      clog.warn("unknown command...")
   }
 }
 
 func main() {
   if len(os.Args) == 1 {
-    log.Info("Please provide a port number!")
+    fmt.Println("Please provide a port number!")
     return
   }
   port := ":" + os.Args[1]
@@ -217,11 +207,11 @@ func main() {
   }
 
   defer func() {
-    log.Info("Stop listening...")
+    log.Info("stop listening...")
     listener.Close()
   }()
 
-  log.Info("Start listening...")
+  log.Info("start listening...")
   for {
     connection, err := listener.Accept()
     if err != nil {
@@ -230,4 +220,4 @@ func main() {
     }
     go handleConnection(connection)
   }
-}     
+}
