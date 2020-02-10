@@ -103,7 +103,7 @@ func handleConnection(connection net.Conn) {
       writer.Flush()
 
     case "3":
-      clog.Debug("adding service...")
+      clog.Debug("announcing service...")
       uuid := readTrimmedLine(reader)
       clog.Debug(uuid)
 
@@ -124,7 +124,7 @@ func handleConnection(connection net.Conn) {
         }
       }
 
-    case "5":
+    case "4":
       clog.Debug("adding client connection...")
       addr := readTrimmedLine(reader)
       clog.Debug(addr)
@@ -152,7 +152,7 @@ func handleConnection(connection net.Conn) {
         }
       }
 
-    case "6":
+    case "5":
       clog.Debug("linking client connection...")
       connId := readTrimmedLine(reader)
       clog.Debug(connId)
