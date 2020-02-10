@@ -24,7 +24,7 @@ func pseudoUuid() (string) {
     b := make([]byte, 16)
     _, err := rand.Read(b)
     if err != nil {
-        log.Panic(err)
+      log.Panic(err)
     }
     return fmt.Sprintf("%X-%X-%X-%X-%X", b[0:4], b[4:6], b[6:8], b[8:10], b[10:])
 }
@@ -75,6 +75,7 @@ func handleConnection(connection net.Conn) {
   reader := bufio.NewReader(connection)
   cmd := readTrimmedLine(reader)
   address := readTrimmedLine(reader)
+
   clog = log.WithFields(log.Fields{
     "address": address,
     "cmd": cmd,
@@ -107,95 +108,95 @@ func handleConnection(connection net.Conn) {
       writer.Flush()
 
     case "3":
-          clog.Debug("adding service...")
-          uuid := readTrimmedLine(reader)
-          clog.Debug(uuid)
+      clog.Debug("adding service...")
+      uuid := readTrimmedLine(reader)
+      clog.Debug(uuid)
 
-          devices[address][uuid] = connection
-          defer func() {
-            clog.Debug("removing service...")
-            delete(devices[address], uuid)
-          }()
+      devices[address][uuid] = connection
+      defer func() {
+        clog.Debug("removing service...")
+        delete(devices[address], uuid)
+      }()
 
-          listening++
-          defer func() {listening--}()
+      listening++
+      defer func() {listening--}()
 
-          clog.Debug("keeping listener connection...")
-          for {
-            if (connCheck(connection) != nil) {
-              clog.Debug("listener connection closed");
-              break;
-            }
-          }
+      clog.Debug("keeping listener connection...")
+      for {
+        if (connCheck(connection) != nil) {
+          clog.Debug("listener connection closed");
+          break;
+        }
+      }
 
     case "5":
-          clog.Debug("adding client connection...")
-          addr := readTrimmedLine(reader)
-          clog.Debug(addr)
-          uuid := readTrimmedLine(reader)
-          clog.Debug(uuid)
-          connId := pseudoUuid()
-          clog.Debug(connId)
+      clog.Debug("adding client connection...")
+      addr := readTrimmedLine(reader)
+      clog.Debug(addr)
+      uuid := readTrimmedLine(reader)
+      clog.Debug(uuid)
+      connId := pseudoUuid()
+      clog.Debug(connId)
 
-          connections[connId] = connection
-          defer func() {
-            clog.Debug("removing client connection...")
-            delete(connections, connId)
-          }()
+      connections[connId] = connection
+      defer func() {
+        clog.Debug("removing client connection...")
+        delete(connections, connId)
+      }()
 
-          writer := bufio.NewWriter(devices[addr][uuid])
-          writer.WriteString(address + "\n")
-          writer.WriteString(connId + "\n")
-          writer.Flush()
+      writer := bufio.NewWriter(devices[addr][uuid])
+      writer.WriteString(address + "\n")
+      writer.WriteString(connId + "\n")
+      writer.Flush()
 
-          clog.Debug("keeping client connection...")
-          for {
-            if (connCheck(connection) != nil) {
-              clog.Debug("client connection closed");
-              break;
-            }
-          }
+      clog.Debug("keeping client connection...")
+      for {
+        if (connCheck(connection) != nil) {
+          clog.Debug("client connection closed");
+          break;
+        }
+      }
 
     case "6":
-          clog.Debug("linking client connection...")
-          connId := readTrimmedLine(reader)
-          clog.Debug(connId)
+      clog.Debug("linking client connection...")
+      connId := readTrimmedLine(reader)
+      clog.Debug(connId)
 
-          clientConnection := connections[connId]
-          defer func() {
-            clog.Debug("closing client connection...")
-            clientConnection.Close()
-          }()
+      clientConnection := connections[connId]
+      defer func() {
+        clog.Debug("closing client connection...")
+        clientConnection.Close()
+      }()
 
-          active++
-          defer func() {active--}()
-          
-          // There seem to be situations where neither of the following
-          // functions ever return, even though the connections have been
-          // closed on the emulator side. This should be investigated further.
-          // However, the functions return at least, if the app that has created
-          // the connection has been stopped. So it's not critical.
+      active++
+      defer func() {active--}()
 
-          writeDone := make(chan bool)
+      // There seem to be situations where neither of the following
+      // functions ever return, even though the connections have been
+      // closed on the emulator side. This should be investigated further.
+      // However, the functions return at least, if the app that has created
+      // the connection has been stopped. So it's not critical.
 
-          go func() {
-            defer func() { writeDone <- true }()
-            clog.Debug("writing from client to server...")
-            writer := bufio.NewWriter(connection)
-            clientReader := bufio.NewReader(clientConnection)
-            clientReader.WriteTo(writer)
-            clog.Debug("writing from client to server done")
-          }()
+      writeDone := make(chan bool)
 
-          go func() {
-            defer func() { writeDone <- true }()
-            clog.Debug("writing from server to client...")
-            clientWriter := bufio.NewWriter(clientConnection)
-            reader.WriteTo(clientWriter)
-            clog.Debug("writing from server to client done")
-          }()
+      go func() {
+        defer func() { writeDone <- true }()
+        clog.Debug("writing from client to server...")
+        writer := bufio.NewWriter(connection)
+        clientReader := bufio.NewReader(clientConnection)
+        clientReader.WriteTo(writer)
+        clog.Debug("writing from client to server done")
+      }()
 
-          <-writeDone
+      go func() {
+        defer func() { writeDone <- true }()
+        clog.Debug("writing from server to client...")
+        clientWriter := bufio.NewWriter(clientConnection)
+        reader.WriteTo(clientWriter)
+        clog.Debug("writing from server to client done")
+      }()
+
+      <- writeDone
 
     default:
       clog.Warn("unknown command...")
@@ -210,13 +211,13 @@ func main() {
   ticker := time.NewTicker(5 * time.Minute)
   go func() {
     for {
-        <- ticker.C
-        log.WithFields(log.Fields{
-          "devices": len(devices),
-          "listening": listening,
-          "connections": len(connections),
-          "active": active,
-        }).Info("statistics");
+      <- ticker.C
+      log.WithFields(log.Fields{
+        "devices": len(devices),
+        "listening": listening,
+        "connections": len(connections),
+        "active": active,
+      }).Info("statistics");
     }
    }()
 
