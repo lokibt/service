@@ -13,15 +13,19 @@ import (
   log "github.com/sirupsen/logrus"
 )
 
-type connSet struct{
+type connSet struct {
   reader *bufio.Reader
   writer *bufio.Writer
   conn net.Conn
 }
 
-var discoverable = make(map[string]bool)
-var services = make(map[string]map[string]connSet)
-var connections = make(map[string]connSet)
+type ipSet struct {
+  discoverable *map[string]bool
+  services *map[string]map[string]connSet
+  connections *map[string]connSet
+}
+
+var ips = make(map[string]ipSet)
 var listening = 0;
 var active = 0;
 var nextConnId = 0
@@ -68,11 +72,24 @@ func readTrimmedLine(reader *bufio.Reader) string {
 
 func handleConnection(connection net.Conn) {
   var clog *log.Entry
-
+  
   defer func() {
     clog.Debug("closing connection...")
     connection.Close()
   }()
+  
+  ip := connection.RemoteAddr().String()
+  ip = ip[:len(ip)-6]
+  if _, exists := ips[ip]; exists == false {
+    log.Debug("create new lists for ", ip)
+    dis := make(map[string]bool)
+    ser := make(map[string]map[string]connSet)
+    con := make(map[string]connSet)
+    ips[ip] = ipSet { &dis, &ser, &con }
+  }
+  discoverable := *ips[ip].discoverable
+  services := *ips[ip].services
+  connections := *ips[ip].connections
 
   reader := bufio.NewReader(connection)
   cmd := readTrimmedLine(reader)
@@ -81,6 +98,7 @@ func handleConnection(connection net.Conn) {
   clog = log.WithFields(log.Fields{
     "address": address,
     "cmd": cmd,
+    "ip": ip,
   })
   clog.Debug("command received")
 
@@ -279,9 +297,7 @@ func main() {
     for {
       <- ticker.C
       log.WithFields(log.Fields{
-        "discoverable": len(discoverable),
-        "services": len(services),
-        "connections": len(connections),
+        "ips": len(ips),
         "listening": listening,
         "active": active,
       }).Info("statistics");
