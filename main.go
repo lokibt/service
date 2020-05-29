@@ -19,13 +19,13 @@ type connSet struct {
   conn net.Conn
 }
 
-type ipSet struct {
+type groupSet struct {
   discoverable *map[string]bool
   services *map[string]map[string]connSet
   connections *map[string]connSet
 }
 
-var ips = make(map[string]ipSet)
+var groups = make(map[string]groupSet)
 var listening = 0;
 var active = 0;
 var nextConnId = 0
@@ -77,28 +77,33 @@ func handleConnection(connection net.Conn) {
     clog.Debug("closing connection...")
     connection.Close()
   }()
+
+  reader := bufio.NewReader(connection)
+  group := readTrimmedLine(reader)
+  cmd := readTrimmedLine(reader)
+  address := readTrimmedLine(reader)
   
-  ip := connection.RemoteAddr().String()
-  ip = ip[:len(ip)-6]
-  if _, exists := ips[ip]; exists == false {
-    log.Debug("create new lists for ", ip)
+  println("Group: " + group + "; length: " + strconv.Itoa(len(group)))
+  if len(group) == 0 {
+    group = connection.RemoteAddr().String()
+    group = group[:len(group)-6]
+  }
+ 
+  if _, exists := groups[group]; exists == false {
+    log.Debug("create new lists for ", group)
     dis := make(map[string]bool)
     ser := make(map[string]map[string]connSet)
     con := make(map[string]connSet)
-    ips[ip] = ipSet { &dis, &ser, &con }
+    groups[group] = groupSet { &dis, &ser, &con }
   }
-  discoverable := *ips[ip].discoverable
-  services := *ips[ip].services
-  connections := *ips[ip].connections
-
-  reader := bufio.NewReader(connection)
-  cmd := readTrimmedLine(reader)
-  address := readTrimmedLine(reader)
+  discoverable := *groups[group].discoverable
+  services := *groups[group].services
+  connections := *groups[group].connections
 
   clog = log.WithFields(log.Fields{
     "address": address,
     "cmd": cmd,
-    "ip": ip,
+    "group": group,
   })
   clog.Debug("command received")
 
@@ -288,6 +293,9 @@ func handleConnection(connection net.Conn) {
 }
 
 func main() {
+  log.SetFormatter(&log.TextFormatter{
+		FullTimestamp: true,
+	})
   if len(os.Args) >= 2 && os.Args[1] == "--debug" {
     log.SetLevel(log.DebugLevel)
   }
@@ -297,7 +305,7 @@ func main() {
     for {
       <- ticker.C
       log.WithFields(log.Fields{
-        "ips": len(ips),
+        "groups": len(groups),
         "listening": listening,
         "active": active,
       }).Info("statistics");
