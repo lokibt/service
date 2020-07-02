@@ -111,8 +111,17 @@ func handleConnection(connection net.Conn) {
     case "0":
       clog.Debug("adding device...")
       discoverable[address] = true
-
+      clog.Debug("keeping discoverable connection...")
+      for {
+        if (connCheck(connection) != nil) {
+          clog.Debug("discoverable connection closed.")
+          clog.Debug("removing device...")
+          delete(discoverable, address)
+          break;
+        }
+      }
     case "1":
+      clog.Warn("Usage of obsolete command LEAVE (1)")
       clog.Debug("removing device...")
       delete(discoverable, address)
 
