@@ -120,10 +120,9 @@ func handleConnection(connection net.Conn) {
           break;
         }
       }
+
     case "1":
       clog.Warn("Usage of obsolete command LEAVE (1)")
-      clog.Debug("removing device...")
-      delete(discoverable, address)
 
     case "2":
       clog.Debug("sending services...")
