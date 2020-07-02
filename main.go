@@ -314,7 +314,7 @@ func main() {
 
   log.Info("starting service...")
 
-  listener, err := net.Listen("tcp4", ":8199")
+  listener, err := net.Listen("tcp4", ":8198")
   if err != nil {
     log.Fatal(err)
     return
