@@ -13,7 +13,7 @@ import (
   log "github.com/sirupsen/logrus"
 )
 
-var CMDS = [...]string {"JOIN", "LEAVE", "DISCOVER", "ANNOUNCE", "LISTEN"}
+var CMDS = [...]string {"JOIN", "LEAVE", "DISCOVERY", "ANNOUNCE", "CONNECT", "LINK"}
 
 type connSet struct {
   reader *bufio.Reader
@@ -113,7 +113,7 @@ func handleConnection(connection net.Conn) {
   clog.Debug(CMDS[cmd] + " command received")
 
   switch cmd {
-    case 0:
+    case 0: // JOIN
       clog.Debug("adding device...")
       writer := bufio.NewWriter(connection)
       discoverable[address] = connSet{reader, writer, connection}
@@ -135,10 +135,10 @@ func handleConnection(connection net.Conn) {
         }
       }
 
-    case 1:
+    case 1: // LEAVE
       clog.Warn("Usage of obsolete command")
 
-    case 2:
+    case 2: // DISCOVER
       clog.Debug("register device as discovering...")
       writer := bufio.NewWriter(connection)
       discovering[address] = connSet{reader, writer, connection}
@@ -162,7 +162,7 @@ func handleConnection(connection net.Conn) {
         }
       }
 
-    case 3:
+    case 3: // ANNOUNCE
       listening++
       defer func() {listening--}()
 
@@ -192,7 +192,7 @@ func handleConnection(connection net.Conn) {
         }
       }
 
-    case 4:
+    case 4: // CONNECT
       clog.Debug("adding client connection...")
       addr := readTrimmedLine(reader)
       clog.Debug(addr)
@@ -230,7 +230,7 @@ func handleConnection(connection net.Conn) {
         }
       }
 
-    case 5:
+    case 5: // LINK
       active++
       defer func() {active--}()
       
