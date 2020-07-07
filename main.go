@@ -13,6 +13,8 @@ import (
   log "github.com/sirupsen/logrus"
 )
 
+var CMDS = [...]string {"JOIN", "LEAVE", "DISCOVER", "ANNOUNCE", "LISTEN"}
+
 type connSet struct {
   reader *bufio.Reader
   writer *bufio.Writer
@@ -81,7 +83,7 @@ func handleConnection(connection net.Conn) {
 
   reader := bufio.NewReader(connection)
   group := readTrimmedLine(reader)
-  cmd := readTrimmedLine(reader)
+  cmd, _ := strconv.Atoi(readTrimmedLine(reader))
   address := readTrimmedLine(reader)
   
   println("Group: " + group + "; length: " + strconv.Itoa(len(group)))
@@ -108,10 +110,10 @@ func handleConnection(connection net.Conn) {
     "cmd": cmd,
     "group": group,
   })
-  clog.Debug("command received")
+  clog.Debug(CMDS[cmd] + " command received")
 
   switch cmd {
-    case "0":
+    case 0:
       clog.Debug("adding device...")
       discoverable[address] = true
       clog.Debug("keeping discoverable connection...")
@@ -124,10 +126,10 @@ func handleConnection(connection net.Conn) {
         }
       }
 
-    case "1":
-      clog.Warn("Usage of obsolete command LEAVE (1)")
+    case 1:
+      clog.Warn("Usage of obsolete command")
 
-    case "2":
+    case 2:
       clog.Debug("register device as discovering...")
       writer := bufio.NewWriter(connection)
       discovering[address] = connSet{reader, writer, connection}
@@ -155,7 +157,7 @@ func handleConnection(connection net.Conn) {
         }
       }
 
-    case "3":
+    case 3:
       listening++
       defer func() {listening--}()
 
@@ -185,7 +187,7 @@ func handleConnection(connection net.Conn) {
         }
       }
 
-    case "4":
+    case 4:
       clog.Debug("adding client connection...")
       addr := readTrimmedLine(reader)
       clog.Debug(addr)
@@ -224,7 +226,7 @@ func handleConnection(connection net.Conn) {
         }
       }
 
-    case "5":
+    case 5:
       active++
       defer func() {active--}()
       
