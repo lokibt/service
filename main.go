@@ -22,7 +22,7 @@ type connSet struct {
 }
 
 type groupSet struct {
-  discoverable *map[string]bool
+  discoverable *map[string]connSet
   discovering *map[string]connSet
   services *map[string]map[string]connSet
   connections *map[string]connSet
@@ -94,7 +94,7 @@ func handleConnection(connection net.Conn) {
  
   if _, exists := groups[group]; exists == false {
     log.Debug("create new lists for ", group)
-    dis := make(map[string]bool)
+    dis := make(map[string]connSet)
     dbl := make(map[string]connSet)
     ser := make(map[string]map[string]connSet)
     con := make(map[string]connSet)
@@ -115,7 +115,8 @@ func handleConnection(connection net.Conn) {
   switch cmd {
     case 0:
       clog.Debug("adding device...")
-      discoverable[address] = true
+      writer := bufio.NewWriter(connection)
+      discoverable[address] = connSet{reader, writer, connection}
       clog.Debug("keeping discoverable connection...")
       for {
         if (connCheck(connection) != nil) {
