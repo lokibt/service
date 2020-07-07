@@ -21,6 +21,7 @@ type connSet struct {
 
 type groupSet struct {
   discoverable *map[string]bool
+  discovering *map[string]connSet
   services *map[string]map[string]connSet
   connections *map[string]connSet
 }
@@ -92,11 +93,13 @@ func handleConnection(connection net.Conn) {
   if _, exists := groups[group]; exists == false {
     log.Debug("create new lists for ", group)
     dis := make(map[string]bool)
+    dbl := make(map[string]connSet)
     ser := make(map[string]map[string]connSet)
     con := make(map[string]connSet)
-    groups[group] = groupSet { &dis, &ser, &con }
+    groups[group] = groupSet { &dis, &dbl, &ser, &con }
   }
   discoverable := *groups[group].discoverable
+  discovering := *groups[group].discovering
   services := *groups[group].services
   connections := *groups[group].connections
 
@@ -125,8 +128,10 @@ func handleConnection(connection net.Conn) {
       clog.Warn("Usage of obsolete command LEAVE (1)")
 
     case "2":
-      clog.Debug("sending services...")
+      clog.Debug("register device as discovering...")
       writer := bufio.NewWriter(connection)
+      discovering[address] = connSet{reader, writer, connection}
+      clog.Debug("sending discovered services...")
       for addr, _ := range discoverable {
         if addr != address {
           entry := addr
@@ -139,6 +144,16 @@ func handleConnection(connection net.Conn) {
         }
       }
       writer.Flush()
+
+      clog.Debug("keeping discovery connection...")
+      for {
+        if (connCheck(connection) != nil) {
+          clog.Debug("discovery connection closed")
+          clog.Debug("unregister device...")
+          delete(discovering, address)
+          break;
+        }
+      }
 
     case "3":
       listening++
