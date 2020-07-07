@@ -117,6 +117,14 @@ func handleConnection(connection net.Conn) {
       clog.Debug("adding device...")
       writer := bufio.NewWriter(connection)
       discoverable[address] = connSet{reader, writer, connection}
+      
+      clog.Debug("notify discovering devices...")
+      for addr, other := range discovering {
+        clog.Debug(addr + " will be notified")
+        other.writer.WriteString(address + "\n")
+        other.writer.Flush()
+      }
+      
       clog.Debug("keeping discoverable connection...")
       for {
         if (connCheck(connection) != nil) {
@@ -134,16 +142,12 @@ func handleConnection(connection net.Conn) {
       clog.Debug("register device as discovering...")
       writer := bufio.NewWriter(connection)
       discovering[address] = connSet{reader, writer, connection}
-      clog.Debug("sending discovered services...")
+
+      clog.Debug("sending discoverable devices...")
       for addr, _ := range discoverable {
         if addr != address {
-          entry := addr
-          for uuid, _ := range services[addr] {
-            entry += "," + uuid
-          }
-          entry += "\n"
-          clog.Debug(entry)
-          writer.WriteString(entry)
+          clog.Debug(addr + " will be sent")
+          writer.WriteString(addr + "\n")
         }
       }
       writer.Flush()
@@ -203,7 +207,6 @@ func handleConnection(connection net.Conn) {
         clog.Debug("removing client connection...")
         delete(connections, connId)
       }()
-
       
       // TODO The following block should lock `services`
       if _, exists := services[addr]; exists == false {
