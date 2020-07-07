@@ -210,11 +210,15 @@ func handleConnection(connection net.Conn) {
       
       // TODO The following block should lock `services`
       if _, exists := services[addr]; exists == false {
-        clog.Info("address of service does not exist");
+        clog.Info("address of service does not exist")
+        writer.WriteString("fail\n")
+        writer.Flush()
         return
       }
       if _, exists := services[addr][uuid]; exists == false {
-        clog.Info("uuid of service does not exist");
+        clog.Info("uuid of service does not exist")
+        writer.WriteString("fail\n")
+        writer.Flush()
         return
       }
       listenWriter := services[addr][uuid].writer
@@ -222,6 +226,8 @@ func handleConnection(connection net.Conn) {
       listenWriter.WriteString(connId + "\n")
       listenWriter.Flush()
 
+      writer.WriteString("ok\n")
+      writer.Flush()
       clog.Debug("keeping client connection...")
       for {
         if (connCheck(connection) != nil) {
