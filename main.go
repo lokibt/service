@@ -19,6 +19,7 @@ type connSet struct {
   reader *bufio.Reader
   writer *bufio.Writer
   conn net.Conn
+  available bool
 }
 
 type groupSet struct {
@@ -116,7 +117,7 @@ func handleConnection(connection net.Conn) {
     case 0: // JOIN
       clog.Debug("adding device...")
       writer := bufio.NewWriter(connection)
-      discoverable[address] = connSet{reader, writer, connection}
+      discoverable[address] = connSet{reader, writer, connection, true}
       
       clog.Debug("notify discovering devices...")
       for addr, other := range discovering {
@@ -141,7 +142,7 @@ func handleConnection(connection net.Conn) {
     case 2: // DISCOVER
       clog.Debug("register device as discovering...")
       writer := bufio.NewWriter(connection)
-      discovering[address] = connSet{reader, writer, connection}
+      discovering[address] = connSet{reader, writer, connection, true}
 
       clog.Debug("sending discoverable devices...")
       for addr, _ := range discoverable {
@@ -175,7 +176,7 @@ func handleConnection(connection net.Conn) {
       if _, exists := services[address]; exists == false {
         services[address] = make(map[string]connSet)
       }
-      services[address][uuid] = connSet{reader, writer, connection}
+      services[address][uuid] = connSet{reader, writer, connection, true}
       defer func() {
         clog.Debug("removing service...")
         delete(services[address], uuid)
@@ -202,7 +203,7 @@ func handleConnection(connection net.Conn) {
       clog.Debug(connId)
 
       writer := bufio.NewWriter(connection)
-      connections[connId] = connSet{reader, writer, connection}
+      connections[connId] = connSet{reader, writer, connection, true}
       defer func() {
         clog.Debug("removing client connection...")
         delete(connections, connId)
@@ -215,12 +216,33 @@ func handleConnection(connection net.Conn) {
         writer.Flush()
         return
       }
+
       if _, exists := services[addr][uuid]; exists == false {
         clog.Info("uuid of service does not exist")
         writer.WriteString("fail\n")
         writer.Flush()
         return
       }
+
+      if services[addr][uuid].available == false {
+        clog.Info("service is already in use")
+        writer.WriteString("fail\n")
+        writer.Flush()
+        return
+      }
+      service := services[addr][uuid]
+      service.available = false
+      services[addr][uuid] = service;
+      clog.Debug("service has been marked as in use")
+      defer func() {
+        if _, exists := services[addr][uuid]; exists == true {
+          service := services[addr][uuid]
+          service.available = true
+          services[addr][uuid] = service;
+          clog.Debug("service is not in use anymore")
+        }
+      }()
+
       listenWriter := services[addr][uuid].writer
       listenWriter.WriteString(address + "\n")
       listenWriter.WriteString(connId + "\n")
