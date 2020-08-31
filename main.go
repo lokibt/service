@@ -72,6 +72,9 @@ func handleConnection(connection net.Conn) {
   defer func() {
     clog.Debug("closing connection...")
     connection.Close()
+    if r := recover(); r != nil {
+      clog.Debug("recovered from panic")
+    }
   }()
 
   readTrimmedLine := func(reader *bufio.Reader) string {
