@@ -65,36 +65,44 @@ func getConnectionId() (string) {
   return strconv.Itoa(nextConnId)
 }
 
-func readTrimmedLine(reader *bufio.Reader) string {
-    line, err := reader.ReadString('\n')
-    if err != nil {
-      log.Panic(err)
-    }
-    line = strings.TrimSpace(string(line))
-    return line
-}
 
 func handleConnection(connection net.Conn) {
-  var clog *log.Entry
+  clog := log.WithFields(log.Fields{})
   
   defer func() {
     clog.Debug("closing connection...")
     connection.Close()
   }()
 
+  readTrimmedLine := func(reader *bufio.Reader) string {
+      line, err := reader.ReadString('\n')
+      if err != nil {
+        clog.Panic(err)
+      }
+      line = strings.TrimSpace(string(line))
+      return line
+  }
+
   reader := bufio.NewReader(connection)
   group := readTrimmedLine(reader)
   cmd, _ := strconv.Atoi(readTrimmedLine(reader))
   address := readTrimmedLine(reader)
   
-  println("Group: " + group + "; length: " + strconv.Itoa(len(group)))
   if len(group) == 0 {
+    clog.Debug("Group not defined, using IP address")
     group = connection.RemoteAddr().String()
     group = group[:len(group)-6]
   }
+
+  clog = log.WithFields(log.Fields{
+    "address": address,
+    "cmd": cmd,
+    "group": group,
+  })
+  clog.Debug(CMDS[cmd] + " command received")
  
   if _, exists := groups[group]; exists == false {
-    log.Debug("create new lists for ", group)
+    clog.Debug("create new lists for ", group)
     dis := make(map[string]connSet)
     dbl := make(map[string]connSet)
     ser := make(map[string]map[string]connSet)
@@ -105,13 +113,6 @@ func handleConnection(connection net.Conn) {
   discovering := *groups[group].discovering
   services := *groups[group].services
   connections := *groups[group].connections
-
-  clog = log.WithFields(log.Fields{
-    "address": address,
-    "cmd": cmd,
-    "group": group,
-  })
-  clog.Debug(CMDS[cmd] + " command received")
 
   switch cmd {
     case 0: // JOIN
