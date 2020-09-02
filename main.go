@@ -9,6 +9,7 @@ import (
   "strconv"
   "syscall"
   "time"
+  "sync"
   
   log "github.com/sirupsen/logrus"
 )
@@ -30,6 +31,7 @@ type groupSet struct {
 }
 
 var groups = make(map[string]groupSet)
+var groupsM sync.Mutex
 var listening = 0;
 var active = 0;
 var nextConnId = 0
@@ -121,7 +123,9 @@ func handleConnection(connection net.Conn) {
     case 0: // JOIN
       clog.Debug("adding device...")
       writer := bufio.NewWriter(connection)
+      groupsM.Lock();
       discoverable[address] = connSet{reader, writer, connection, true}
+      groupsM.Unlock();
       
       clog.Debug("notify discovering devices...")
       for addr, other := range discovering {
@@ -135,7 +139,9 @@ func handleConnection(connection net.Conn) {
         if (connCheck(connection) != nil) {
           clog.Debug("discoverable connection closed.")
           clog.Debug("removing device...")
+          groupsM.Lock();
           delete(discoverable, address)
+          groupsM.Unlock();
           break;
         }
       }
@@ -146,7 +152,9 @@ func handleConnection(connection net.Conn) {
     case 2: // DISCOVER
       clog.Debug("register device as discovering...")
       writer := bufio.NewWriter(connection)
+      groupsM.Lock();
       discovering[address] = connSet{reader, writer, connection, true}
+      groupsM.Unlock();
 
       clog.Debug("sending discoverable devices...")
       for addr, _ := range discoverable {
@@ -162,7 +170,9 @@ func handleConnection(connection net.Conn) {
         if (connCheck(connection) != nil) {
           clog.Debug("discovery connection closed")
           clog.Debug("unregister device...")
+          groupsM.Lock();
           delete(discovering, address)
+          groupsM.Unlock();
           break;
         }
       }
@@ -177,6 +187,7 @@ func handleConnection(connection net.Conn) {
       
       writer := bufio.NewWriter(connection)
 
+      groupsM.Lock();
       if _, exists := services[address]; exists == false {
         services[address] = make(map[string]connSet)
       }
@@ -185,12 +196,16 @@ func handleConnection(connection net.Conn) {
         return;
       }
       services[address][uuid] = connSet{reader, writer, connection, true}
+      groupsM.Unlock();
+
       defer func() {
+        groupsM.Lock();
         clog.Debug("removing service...")
         delete(services[address], uuid)
         if len(services[address]) == 0 {
           delete(services, address)
         }
+        groupsM.Unlock();
       }()
 
       clog.Debug("keeping listener connection...")
@@ -211,27 +226,30 @@ func handleConnection(connection net.Conn) {
       clog.Debug(connId)
 
       writer := bufio.NewWriter(connection)
+      groupsM.Lock();
       connections[connId] = connSet{reader, writer, connection, true}
+      groupsM.Unlock();
+
       defer func() {
         clog.Debug("removing client connection...")
+        groupsM.Lock();
         delete(connections, connId)
+        groupsM.Unlock();
       }()
       
-      // TODO The following block should lock `services`
+      groupsM.Lock();
       if _, exists := services[addr]; exists == false {
         clog.Info("address of service does not exist")
         writer.WriteString("fail\n")
         writer.Flush()
         return
       }
-
       if _, exists := services[addr][uuid]; exists == false {
         clog.Info("uuid of service does not exist")
         writer.WriteString("fail\n")
         writer.Flush()
         return
       }
-
       if services[addr][uuid].available == false {
         clog.Info("service is already in use")
         writer.WriteString("fail\n")
@@ -242,13 +260,17 @@ func handleConnection(connection net.Conn) {
       service.available = false
       services[addr][uuid] = service;
       clog.Debug("service has been marked as in use")
+      groupsM.Unlock();
+
       defer func() {
+        groupsM.Lock();
         if _, exists := services[addr][uuid]; exists == true {
           service := services[addr][uuid]
           service.available = true
           services[addr][uuid] = service;
           clog.Debug("service is not in use anymore")
         }
+        groupsM.Unlock();
       }()
 
       listenWriter := services[addr][uuid].writer
@@ -274,7 +296,7 @@ func handleConnection(connection net.Conn) {
       connId := readTrimmedLine(reader)
       clog.Debug(connId)
 
-      // TODO The following block should lock `connections`
+      groupsM.Lock();
       if _, exists := connections[connId]; exists == false {
         clog.Info("connection does not exist");
         return
@@ -282,6 +304,8 @@ func handleConnection(connection net.Conn) {
       clientConnection := connections[connId].conn
       clientReader := connections[connId].reader
       clientWriter := connections[connId].writer
+      groupsM.Unlock();
+
       defer func() {
         clog.Debug("closing client connection...")
         clientConnection.Close()
