@@ -180,6 +180,10 @@ func handleConnection(connection net.Conn) {
       if _, exists := services[address]; exists == false {
         services[address] = make(map[string]connSet)
       }
+      if _, exists := services[address][uuid]; exists == true {
+        clog.Debug("service has already been announced");
+        return;
+      }
       services[address][uuid] = connSet{reader, writer, connection, true}
       defer func() {
         clog.Debug("removing service...")
