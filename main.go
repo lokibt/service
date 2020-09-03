@@ -193,6 +193,7 @@ func handleConnection(connection net.Conn) {
       }
       if _, exists := services[address][uuid]; exists == true {
         clog.Debug("service has already been announced");
+        groupsM.Unlock();
         return;
       }
       services[address][uuid] = connSet{reader, writer, connection, true}
@@ -242,18 +243,21 @@ func handleConnection(connection net.Conn) {
         clog.Info("address of service does not exist")
         writer.WriteString("fail\n")
         writer.Flush()
+        groupsM.Unlock();
         return
       }
       if _, exists := services[addr][uuid]; exists == false {
         clog.Info("uuid of service does not exist")
         writer.WriteString("fail\n")
         writer.Flush()
+        groupsM.Unlock();
         return
       }
       if services[addr][uuid].available == false {
         clog.Info("service is already in use")
         writer.WriteString("fail\n")
         writer.Flush()
+        groupsM.Unlock();
         return
       }
       service := services[addr][uuid]
@@ -299,6 +303,7 @@ func handleConnection(connection net.Conn) {
       groupsM.Lock();
       if _, exists := connections[connId]; exists == false {
         clog.Info("connection does not exist");
+        groupsM.Unlock();
         return
       }
       clientConnection := connections[connId].conn
