@@ -14,7 +14,7 @@ import (
   log "github.com/sirupsen/logrus"
 )
 
-var CMDS = [...]string {"JOIN", "LEAVE", "DISCOVERY", "ANNOUNCE", "CONNECT", "LINK"}
+var CMDS = [...]string {"JOIN", "LEAVE", "DISCOVERY", "LISTEN", "CONNECT", "LINK"}
 
 type connSet struct {
   reader *bufio.Reader
@@ -72,7 +72,7 @@ func handleConnection(connection net.Conn) {
   clog := log.WithFields(log.Fields{})
   
   defer func() {
-    clog.Debug("closing connection...")
+    clog.Debug("closing connection ", connection.RemoteAddr())
     connection.Close()
     if r := recover(); r != nil {
       clog.Debug("recovered from panic")
@@ -134,10 +134,10 @@ func handleConnection(connection net.Conn) {
         other.writer.Flush()
       }
       
-      clog.Debug("keeping discoverable connection...")
+      clog.Debug("keeping discoverable connection ", connection.RemoteAddr())
       for {
         if (connCheck(connection) != nil) {
-          clog.Debug("discoverable connection closed.")
+          clog.Debug("discoverable connection ", connection.RemoteAddr(), " closed")
           clog.Debug("removing device...")
           groupsM.Lock();
           delete(discoverable, address)
@@ -165,10 +165,10 @@ func handleConnection(connection net.Conn) {
       }
       writer.Flush()
 
-      clog.Debug("keeping discovery connection...")
+      clog.Debug("keeping discovery connection ", connection.RemoteAddr())
       for {
         if (connCheck(connection) != nil) {
-          clog.Debug("discovery connection closed")
+          clog.Debug("discovery connection ", connection.RemoteAddr(), " closed")
           clog.Debug("unregister device...")
           groupsM.Lock();
           delete(discovering, address)
@@ -177,11 +177,10 @@ func handleConnection(connection net.Conn) {
         }
       }
 
-    case 3: // ANNOUNCE
+    case 3: // LISTEN
       listening++
       defer func() {listening--}()
 
-      clog.Debug("announcing service...")
       uuid := readTrimmedLine(reader)
       clog.Debug(uuid)
       
@@ -192,7 +191,7 @@ func handleConnection(connection net.Conn) {
         services[address] = make(map[string]connSet)
       }
       if _, exists := services[address][uuid]; exists == true {
-        clog.Debug("service has already been announced");
+        clog.Debug("service ", uuid, " is already listening");
         groupsM.Unlock();
         return;
       }
@@ -209,10 +208,10 @@ func handleConnection(connection net.Conn) {
         groupsM.Unlock();
       }()
 
-      clog.Debug("keeping listener connection...")
+      clog.Debug("keeping listen connection ", connection.RemoteAddr())
       for {
         if (connCheck(connection) != nil) {
-          clog.Debug("listener connection closed")
+          clog.Debug("listen connection ", connection.RemoteAddr(), " closed")
           break;
         }
       }
@@ -284,10 +283,10 @@ func handleConnection(connection net.Conn) {
 
       writer.WriteString("ok\n")
       writer.Flush()
-      clog.Debug("keeping client connection...")
+      clog.Debug("keeping client connection ", connection.RemoteAddr())
       for {
         if (connCheck(connection) != nil) {
-          clog.Debug("client connection closed")
+          clog.Debug("client connection ", connection.RemoteAddr(), " closed")
           break;
         }
       }
@@ -312,7 +311,7 @@ func handleConnection(connection net.Conn) {
       groupsM.Unlock();
 
       defer func() {
-        clog.Debug("closing client connection...")
+        clog.Debug("closing client connection ", clientConnection.RemoteAddr())
         clientConnection.Close()
       }()
 
