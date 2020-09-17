@@ -143,12 +143,8 @@ func handleConnection(connection net.Conn) {
       }
 
       clog.Debug("keeping discoverable connection ", connection.RemoteAddr())
-      for {
-        if (connCheck(connection) != nil) {
-          clog.Debug("discoverable connection ", connection.RemoteAddr(), " closed")
-          break;
-        }
-      }
+      for (connCheck(connection) == nil) { }
+      clog.Debug("discoverable connection ", connection.RemoteAddr(), " closed")
 
     case 1: // LEAVE
       clog.Warn("Usage of obsolete command")
@@ -178,12 +174,8 @@ func handleConnection(connection net.Conn) {
       writer.Flush()
 
       clog.Debug("keeping discovery connection ", connection.RemoteAddr())
-      for {
-        if (connCheck(connection) != nil) {
-          clog.Debug("discovery connection ", connection.RemoteAddr(), " closed")
-          break;
-        }
-      }
+      for (connCheck(connection) == nil) { }
+      clog.Debug("discovery connection ", connection.RemoteAddr(), " closed")
 
     case 3: // LISTEN
       listening++
@@ -218,12 +210,8 @@ func handleConnection(connection net.Conn) {
       }()
 
       clog.Debug("keeping listen connection ", connection.RemoteAddr())
-      for {
-        if (connCheck(connection) != nil) {
-          clog.Debug("listen connection ", connection.RemoteAddr(), " closed")
-          break;
-        }
-      }
+      for (connCheck(connection) == nil) { }
+      clog.Debug("listen connection ", connection.RemoteAddr(), " closed")
 
     case 4: // CONNECT
       addr := readTrimmedLine(reader)
@@ -293,12 +281,8 @@ func handleConnection(connection net.Conn) {
       writer.WriteString("ok\n")
       writer.Flush()
       clog.Debug("keeping client connection ", connection.RemoteAddr())
-      for {
-        if (connCheck(connection) != nil) {
-          clog.Debug("client connection ", connection.RemoteAddr(), " closed")
-          break;
-        }
-      }
+      for (connCheck(connection) == nil) { }
+      clog.Debug("client connection ", connection.RemoteAddr(), " closed")
 
     case 5: // LINK
       active++
