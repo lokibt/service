@@ -121,27 +121,31 @@ func handleConnection(connection net.Conn) {
 
   switch cmd {
     case 0: // JOIN
-      clog.Debug("adding device...")
       writer := bufio.NewWriter(connection)
+
+      clog.Debug("adding device...")
       groupsM.Lock();
       discoverable[address] = connSet{reader, writer, connection, true}
       groupsM.Unlock();
-      
+
+      defer func() {
+          clog.Debug("removing device...")
+          groupsM.Lock();
+          delete(discoverable, address)
+          groupsM.Unlock();
+      }()
+
       clog.Debug("notify discovering devices...")
       for addr, other := range discovering {
         clog.Debug(addr + " will be notified")
         other.writer.WriteString(address + "\n")
         other.writer.Flush()
       }
-      
+
       clog.Debug("keeping discoverable connection ", connection.RemoteAddr())
       for {
         if (connCheck(connection) != nil) {
           clog.Debug("discoverable connection ", connection.RemoteAddr(), " closed")
-          clog.Debug("removing device...")
-          groupsM.Lock();
-          delete(discoverable, address)
-          groupsM.Unlock();
           break;
         }
       }
@@ -150,11 +154,19 @@ func handleConnection(connection net.Conn) {
       clog.Warn("Usage of obsolete command")
 
     case 2: // DISCOVER
-      clog.Debug("register device as discovering...")
       writer := bufio.NewWriter(connection)
+
+      clog.Debug("register device as discovering...")
       groupsM.Lock();
       discovering[address] = connSet{reader, writer, connection, true}
       groupsM.Unlock();
+
+      defer func() {
+          clog.Debug("unregister device as discovering...")
+          groupsM.Lock();
+          delete(discovering, address)
+          groupsM.Unlock();
+      }()
 
       clog.Debug("sending discoverable devices...")
       for addr, _ := range discoverable {
@@ -169,10 +181,6 @@ func handleConnection(connection net.Conn) {
       for {
         if (connCheck(connection) != nil) {
           clog.Debug("discovery connection ", connection.RemoteAddr(), " closed")
-          clog.Debug("unregister device...")
-          groupsM.Lock();
-          delete(discovering, address)
-          groupsM.Unlock();
           break;
         }
       }
@@ -195,12 +203,13 @@ func handleConnection(connection net.Conn) {
         groupsM.Unlock();
         return;
       }
+      clog.Debug("add service...")
       services[address][uuid] = connSet{reader, writer, connection, true}
       groupsM.Unlock();
 
       defer func() {
         groupsM.Lock();
-        clog.Debug("removing service...")
+        clog.Debug("remove service...")
         delete(services[address], uuid)
         if len(services[address]) == 0 {
           delete(services, address)
@@ -217,7 +226,6 @@ func handleConnection(connection net.Conn) {
       }
 
     case 4: // CONNECT
-      clog.Debug("adding client connection...")
       addr := readTrimmedLine(reader)
       clog.Debug(addr)
       uuid := readTrimmedLine(reader)
@@ -226,6 +234,7 @@ func handleConnection(connection net.Conn) {
       clog.Debug(connId)
 
       writer := bufio.NewWriter(connection)
+      clog.Debug("adding client connection...")
       groupsM.Lock();
       connections[connId] = connSet{reader, writer, connection, true}
       groupsM.Unlock();
