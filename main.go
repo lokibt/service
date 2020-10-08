@@ -101,6 +101,7 @@ func handleConnection(connection net.Conn) {
     group = group[:len(group)-6]
   }
 
+
   clog = log.WithFields(log.Fields{
     "address": address,
     "cmd": cmd,
@@ -108,6 +109,7 @@ func handleConnection(connection net.Conn) {
   })
   clog.Debug(CMDS[cmd] + " command received")
  
+  groupsM.Lock();
   if _, exists := groups[group]; exists == false {
     clog.Debug("create new lists for ", group)
     dis := make(map[string]connSet)
@@ -120,6 +122,16 @@ func handleConnection(connection net.Conn) {
   discovering := *groups[group].discovering
   services := *groups[group].services
   connections := *groups[group].connections
+  groupsM.Unlock();
+
+  defer func() {
+    groupsM.Lock();
+    if len(discoverable) + len(discovering) + len(services) + len(connections) == 0 {
+      clog.Debug("Removing empty group...")
+      delete(groups, group)
+    }
+    groupsM.Unlock();
+  }()
 
   switch cmd {
     case 0: // JOIN
@@ -199,8 +211,8 @@ func handleConnection(connection net.Conn) {
       groupsM.Unlock();
 
       defer func() {
-        groupsM.Lock();
         clog.Debug("remove service...")
+        groupsM.Lock();
         delete(services[address], uuid)
         if len(services[address]) == 0 {
           delete(services, address)
