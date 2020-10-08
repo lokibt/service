@@ -324,28 +324,6 @@ func handleConnection(connection net.Conn) {
         writer := bufio.NewWriter(connection)
         // TODO Investigate why clientReader.WriteTo(writer) does not work here
         writer.ReadFrom(clientReader)
-        // Use the following code for debugging
-        /*for {
-          line, err := clientReader.ReadString('\n')
-          if (err != nil) {
-            if (err != io.EOF) {
-              log.Error("=> ", "read error ", err)
-              break;
-            }
-          } else {
-            writer.WriteString(line)
-            if (err != nil) {
-              log.Error("=> ", "write error: ", err)
-              break
-            }
-            writer.Flush()
-            if (err != nil) {
-              log.Error("=> ", "flush error: ", err)
-              break;
-            }
-            log.Debug("=> ", line)
-          }
-        }//*/
         clog.Debug("writing from client to server done")
       }()
 
@@ -354,28 +332,6 @@ func handleConnection(connection net.Conn) {
         clog.Debug("writing from server to client...")
         // TODO Investigate why reader.WriteTo(clientWriter) does not work here
         clientWriter.ReadFrom(reader)
-        // Use the following code for debugging
-        /*for {
-          line, err := reader.ReadString('\n')
-          if (err != nil) {
-            if (err != io.EOF) {
-              log.Error("<= ", "read error: ", err)
-              break
-            }
-          } else {
-            _, err = clientWriter.WriteString(line)
-            if (err != nil) {
-              log.Error("<= ", "write error: ", err)
-              break
-            }
-            clientWriter.Flush()
-            if (err != nil) {
-              log.Error("<= ", "flush error: ", err)
-              break;
-            }
-            log.Debug("<= ", line)
-          }
-        }*/
         clog.Debug("writing from server to client done")
       }()
 
