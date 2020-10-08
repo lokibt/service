@@ -32,8 +32,7 @@ type groupSet struct {
 
 var groups = make(map[string]groupSet)
 var groupsM sync.Mutex
-var listening = 0;
-var active = 0;
+var active = 0
 var nextConnId = 0
 
 // See https://stackoverflow.com/a/58664631
@@ -69,6 +68,9 @@ func getConnectionId() (string) {
 
 
 func handleConnection(connection net.Conn) {
+  active++
+  defer func() {active--}()
+  
   clog := log.WithFields(log.Fields{})
   
   defer func() {
@@ -178,9 +180,6 @@ func handleConnection(connection net.Conn) {
       clog.Debug("discovery connection ", connection.RemoteAddr(), " closed")
 
     case 3: // LISTEN
-      listening++
-      defer func() {listening--}()
-
       uuid := readTrimmedLine(reader)
       clog.Debug(uuid)
       
@@ -285,9 +284,6 @@ func handleConnection(connection net.Conn) {
       clog.Debug("client connection ", connection.RemoteAddr(), " closed")
 
     case 5: // LINK
-      active++
-      defer func() {active--}()
-      
       clog.Debug("linking client connection...")
       connId := readTrimmedLine(reader)
       clog.Debug(connId)
@@ -378,6 +374,36 @@ func handleConnection(connection net.Conn) {
   }
 }
 
+func compileStats() (int, int, int, int, int) {
+  discoverable := 0
+  discovering := 0
+  services := 0
+  connections := 0
+  for group := range groups {
+    discoverable += len(*groups[group].discoverable)
+    discovering += len(*groups[group].discovering)
+    services += len(*groups[group].services)
+    connections += len(*groups[group].connections)
+  }
+  return len(groups), discoverable, discovering, services, connections
+}
+
+func logStats() {
+  ticker := time.NewTicker(1 * time.Minute)
+  for {
+    groups, discoverable, discovering, services, connections := compileStats()
+    log.WithFields(log.Fields{
+      "active": active,
+      "groups": groups,
+      "discoverable": discoverable,
+      "discovering": discovering,
+      "services": services,
+      "connections": connections,
+    }).Info("statistics");
+    <- ticker.C
+  }
+}
+
 func main() {
   log.SetFormatter(&log.TextFormatter{
 		FullTimestamp: true,
@@ -385,20 +411,10 @@ func main() {
   if len(os.Args) >= 2 && os.Args[1] == "--debug" {
     log.SetLevel(log.DebugLevel)
   }
-
-  ticker := time.NewTicker(5 * time.Minute)
-  go func() {
-    for {
-      <- ticker.C
-      log.WithFields(log.Fields{
-        "groups": len(groups),
-        "listening": listening,
-        "active": active,
-      }).Info("statistics");
-    }
-   }()
-
+  
   log.Info("starting service...")
+
+  go logStats()
 
   listener, err := net.Listen("tcp4", ":8198")
   if err != nil {
