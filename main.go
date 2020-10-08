@@ -26,7 +26,7 @@ type connSet struct {
 type groupSet struct {
   discoverable *map[string]connSet
   discovering *map[string]connSet
-  services *map[string]map[string]connSet
+  serving *map[string]map[string]connSet
   connections *map[string]connSet
 }
 
@@ -120,13 +120,13 @@ func handleConnection(connection net.Conn) {
   }
   discoverable := *groups[group].discoverable
   discovering := *groups[group].discovering
-  services := *groups[group].services
+  serving := *groups[group].serving
   connections := *groups[group].connections
   groupsM.Unlock();
 
   defer func() {
     groupsM.Lock();
-    if len(discoverable) + len(discovering) + len(services) + len(connections) == 0 {
+    if len(discoverable) + len(discovering) + len(serving) + len(connections) == 0 {
       clog.Debug("Removing empty group...")
       delete(groups, group)
     }
@@ -198,24 +198,24 @@ func handleConnection(connection net.Conn) {
       writer := bufio.NewWriter(connection)
 
       groupsM.Lock();
-      if _, exists := services[address]; exists == false {
-        services[address] = make(map[string]connSet)
+      if _, exists := serving[address]; exists == false {
+        serving[address] = make(map[string]connSet)
       }
-      if _, exists := services[address][uuid]; exists == true {
+      if _, exists := serving[address][uuid]; exists == true {
         clog.Debug("service ", uuid, " is already listening");
         groupsM.Unlock();
         return;
       }
       clog.Debug("add service...")
-      services[address][uuid] = connSet{reader, writer, connection, true}
+      serving[address][uuid] = connSet{reader, writer, connection, true}
       groupsM.Unlock();
 
       defer func() {
         clog.Debug("remove service...")
         groupsM.Lock();
-        delete(services[address], uuid)
-        if len(services[address]) == 0 {
-          delete(services, address)
+        delete(serving[address], uuid)
+        if len(serving[address]) == 0 {
+          delete(serving, address)
         }
         groupsM.Unlock();
       }()
@@ -246,45 +246,45 @@ func handleConnection(connection net.Conn) {
       }()
       
       groupsM.Lock();
-      if _, exists := services[addr]; exists == false {
+      if _, exists := serving[addr]; exists == false {
         clog.Info("address of service does not exist")
         writer.WriteString("fail\n")
         writer.Flush()
         groupsM.Unlock();
         return
       }
-      if _, exists := services[addr][uuid]; exists == false {
+      if _, exists := serving[addr][uuid]; exists == false {
         clog.Info("uuid of service does not exist")
         writer.WriteString("fail\n")
         writer.Flush()
         groupsM.Unlock();
         return
       }
-      if services[addr][uuid].available == false {
+      if serving[addr][uuid].available == false {
         clog.Info("service is already in use")
         writer.WriteString("fail\n")
         writer.Flush()
         groupsM.Unlock();
         return
       }
-      service := services[addr][uuid]
+      service := serving[addr][uuid]
       service.available = false
-      services[addr][uuid] = service;
+      serving[addr][uuid] = service;
       clog.Debug("service has been marked as in use")
       groupsM.Unlock();
 
       defer func() {
         groupsM.Lock();
-        if _, exists := services[addr][uuid]; exists == true {
-          service := services[addr][uuid]
+        if _, exists := serving[addr][uuid]; exists == true {
+          service := serving[addr][uuid]
           service.available = true
-          services[addr][uuid] = service;
+          serving[addr][uuid] = service;
           clog.Debug("service is not in use anymore")
         }
         groupsM.Unlock();
       }()
 
-      listenWriter := services[addr][uuid].writer
+      listenWriter := serving[addr][uuid].writer
       listenWriter.WriteString(address + "\n")
       listenWriter.WriteString(connId + "\n")
       listenWriter.Flush()
@@ -345,27 +345,27 @@ func handleConnection(connection net.Conn) {
 func compileStats() (int, int, int, int, int) {
   discoverable := 0
   discovering := 0
-  services := 0
+  serving := 0
   connections := 0
   for group := range groups {
     discoverable += len(*groups[group].discoverable)
     discovering += len(*groups[group].discovering)
-    services += len(*groups[group].services)
+    serving += len(*groups[group].serving)
     connections += len(*groups[group].connections)
   }
-  return len(groups), discoverable, discovering, services, connections
+  return len(groups), discoverable, discovering, serving, connections
 }
 
 func logStats() {
   ticker := time.NewTicker(1 * time.Minute)
   for {
-    groups, discoverable, discovering, services, connections := compileStats()
+    groups, discoverable, discovering, serving, connections := compileStats()
     log.WithFields(log.Fields{
       "active": active,
       "groups": groups,
       "discoverable": discoverable,
       "discovering": discovering,
-      "services": services,
+      "serving": serving,
       "connections": connections,
     }).Info("statistics");
     <- ticker.C
