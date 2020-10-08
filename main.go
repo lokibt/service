@@ -322,16 +322,14 @@ func handleConnection(connection net.Conn) {
         defer func() { writeDone <- true }()
         clog.Debug("writing from client to server...")
         writer := bufio.NewWriter(connection)
-        // TODO Investigate why clientReader.WriteTo(writer) does not work here
-        writer.ReadFrom(clientReader)
+        io.Copy(writer, clientReader)
         clog.Debug("writing from client to server done")
       }()
 
       go func() {
         defer func() { writeDone <- true }()
         clog.Debug("writing from server to client...")
-        // TODO Investigate why reader.WriteTo(clientWriter) does not work here
-        clientWriter.ReadFrom(reader)
+        io.Copy(clientWriter, reader)
         clog.Debug("writing from server to client done")
       }()
 
