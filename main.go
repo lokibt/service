@@ -25,13 +25,13 @@ type connSet struct {
 }
 
 type groupSet struct {
-  discoverable *map[string]connSet
-  discovering *map[string]connSet
-  serving *map[string]map[string]connSet
+  discoverable *map[string]*connSet
+  discovering *map[string]*connSet
+  serving *map[string]map[string]*connSet
   connections *map[string]*connSet
 }
 
-var groups = make(map[string]groupSet)
+var groups = make(map[string]*groupSet)
 var groupsM sync.Mutex
 var active = 0
 var nextConnId = 0
@@ -113,11 +113,11 @@ func handleConnection(connection net.Conn) {
   groupsM.Lock();
   if _, exists := groups[group]; exists == false {
     clog.Debug("create new lists for ", group)
-    dis := make(map[string]connSet)
-    dbl := make(map[string]connSet)
-    ser := make(map[string]map[string]connSet)
+    dis := make(map[string]*connSet)
+    dbl := make(map[string]*connSet)
+    ser := make(map[string]map[string]*connSet)
     con := make(map[string]*connSet)
-    groups[group] = groupSet { &dis, &dbl, &ser, &con }
+    groups[group] = &groupSet { &dis, &dbl, &ser, &con }
   }
   discoverable := *groups[group].discoverable
   discovering := *groups[group].discovering
@@ -140,7 +140,7 @@ func handleConnection(connection net.Conn) {
 
       clog.Debug("adding device...")
       groupsM.Lock();
-      discoverable[address] = connSet{reader, writer, connection, true}
+      discoverable[address] = &connSet{reader, writer, connection, true}
       groupsM.Unlock();
 
       defer func() {
@@ -169,7 +169,7 @@ func handleConnection(connection net.Conn) {
 
       clog.Debug("register device as discovering...")
       groupsM.Lock();
-      discovering[address] = connSet{reader, writer, connection, true}
+      discovering[address] = &connSet{reader, writer, connection, true}
       groupsM.Unlock();
 
       defer func() {
@@ -200,7 +200,7 @@ func handleConnection(connection net.Conn) {
 
       groupsM.Lock();
       if _, exists := serving[address]; exists == false {
-        serving[address] = make(map[string]connSet)
+        serving[address] = make(map[string]*connSet)
       }
       if _, exists := serving[address][uuid]; exists == true {
         clog.Debug("service ", uuid, " is already listening");
@@ -208,7 +208,7 @@ func handleConnection(connection net.Conn) {
         return;
       }
       clog.Debug("add service...")
-      serving[address][uuid] = connSet{reader, writer, connection, true}
+      serving[address][uuid] = &connSet{reader, writer, connection, true}
       groupsM.Unlock();
 
       defer func() {
