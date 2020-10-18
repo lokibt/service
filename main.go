@@ -15,6 +15,7 @@ import (
 )
 
 var CMDS = [...]string {"JOIN", "LEAVE", "DISCOVERY", "LISTEN", "CONNECT", "LINK"}
+const CONN_TIMEOUT = 10
 
 type connSet struct {
   reader *bufio.Reader
@@ -27,7 +28,7 @@ type groupSet struct {
   discoverable *map[string]connSet
   discovering *map[string]connSet
   serving *map[string]map[string]connSet
-  connections *map[string]connSet
+  connections *map[string]*connSet
 }
 
 var groups = make(map[string]groupSet)
@@ -115,7 +116,7 @@ func handleConnection(connection net.Conn) {
     dis := make(map[string]connSet)
     dbl := make(map[string]connSet)
     ser := make(map[string]map[string]connSet)
-    con := make(map[string]connSet)
+    con := make(map[string]*connSet)
     groups[group] = groupSet { &dis, &dbl, &ser, &con }
   }
   discoverable := *groups[group].discoverable
@@ -235,7 +236,7 @@ func handleConnection(connection net.Conn) {
       writer := bufio.NewWriter(connection)
       clog.Debug("adding client connection...")
       groupsM.Lock();
-      connections[connId] = connSet{reader, writer, connection, true}
+      connections[connId] = &connSet{reader, writer, connection, true}
       groupsM.Unlock();
 
       defer func() {
@@ -291,8 +292,17 @@ func handleConnection(connection net.Conn) {
 
       writer.WriteString("ok\n")
       writer.Flush()
-      clog.Debug("keeping client connection ", connection.RemoteAddr())
-      for (connCheck(connection) == nil) { }
+      clog.Debug("keeping client connection (", CONN_TIMEOUT , "s timeout) ", connection.RemoteAddr())
+      // connCheck() might never retun an error, if some data have already been sent by the client, but the server would
+      // never respond with a LINK command. So we have to add a timeout to ensure that the connection is closed, if a
+      // LINK command for the connection has not been received within CONN_TIMEOUT seconds.
+      timeout := time.Now().Unix() + CONN_TIMEOUT;
+      for (connCheck(connection) == nil) {
+        if (connections[connId].available && (time.Now().Unix() >= timeout)) {
+          clog.Debug("client connection ", connection.RemoteAddr(), " timed out")
+          return
+        }
+      }
       clog.Debug("client connection ", connection.RemoteAddr(), " closed")
 
     case 5: // LINK
@@ -309,6 +319,7 @@ func handleConnection(connection net.Conn) {
       clientConnection := connections[connId].conn
       clientReader := connections[connId].reader
       clientWriter := connections[connId].writer
+      connections[connId].available = false;
       groupsM.Unlock();
 
       defer func() {
