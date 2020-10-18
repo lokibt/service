@@ -15,6 +15,9 @@ git clone https://github.com/lokibt/service.git
 cd service
 go run main.go --debug
 ```
+
+Don't forget to [make the necessary changes to connect to an own Loki BT service](#connect-to-a-local-loki-bt-service) in the code of your app, before testing the service.
+
 However, to run the Loki BT service in this way is only recommended for testing purposes.
 
 ## Installation
@@ -27,6 +30,7 @@ cd service
 go build -o lokibt
 sudo cp lokibt /usr/local/bin
 ```
+
 The installation path */usr/local/bin* is only an example, of course. You can install the binary to any place you want.
 
 Windows user should use `go build -o lokibt.exe` to create a binary with the proper file-extension.
@@ -61,6 +65,8 @@ intent.putExtra(BluetoothAdapter.EXTRA_LOKIBT_HOST, "10.0.2.2");
 intent.putExtra(BluetoothAdapter.EXTRA_LOKIBT_PORT, 8198);
 startActivityForResult(intent, REQUEST_DISCOVERABLE);
 ```
+
+If your Service does not run on your local machine, you just have to change the `BluetoothAdapter.EXTRA_LOKIBT_HOST` value to the appropriate address.
 
 ### Command-line arguments
 
