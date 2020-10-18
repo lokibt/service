@@ -51,7 +51,7 @@ The Loki BT library connects to the official web-service by default. If you want
 Intent intent = new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE);
 // The following two lines tell the Loki BT library to connect to a local Loki BT service
 intent.putExtra(BluetoothAdapter.EXTRA_LOKIBT_HOST, "10.0.2.2");
-intent.putExtra(BluetoothAdapter.EXTRA_LOKIBT_PORT, 8198);
+intent.putExtra(BluetoothAdapter.EXTRA_LOKIBT_PORT, 8199);
 startActivityForResult(intent, REQUEST_ENABLE);
 ```
 
@@ -62,7 +62,7 @@ Intent intent = new Intent(BluetoothAdapter.ACTION_REQUEST_DISCOVERABLE);
 intent.putExtra(BluetoothAdapter.EXTRA_DISCOVERABLE_DURATION, 600);
 // The following two lines tell the Loki BT library to connect to a local Loki BT service
 intent.putExtra(BluetoothAdapter.EXTRA_LOKIBT_HOST, "10.0.2.2");
-intent.putExtra(BluetoothAdapter.EXTRA_LOKIBT_PORT, 8198);
+intent.putExtra(BluetoothAdapter.EXTRA_LOKIBT_PORT, 8199);
 startActivityForResult(intent, REQUEST_DISCOVERABLE);
 ```
 
