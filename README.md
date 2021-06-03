@@ -11,7 +11,7 @@ To run or compile the Loki BT service the [Go develeopment framework](https://go
 Once this is installed, you can clone and run the Loki BT service easily with the following commands:
 
 ```
-git clone https://github.com/lokibt/service.git
+git clone --branch=next https://github.com/lokibt/service.git
 cd service
 go run main.go --debug
 ```
