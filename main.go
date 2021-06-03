@@ -152,9 +152,11 @@ func handleConnection(connection net.Conn) {
 
       clog.Debug("notify discovering devices...")
       for addr, other := range discovering {
-        clog.Debug(addr + " will be notified")
-        other.writer.WriteString(address + "\n")
-        other.writer.Flush()
+        if addr != address {
+          clog.Debug(addr + " will be notified")
+          other.writer.WriteString(address + "\n")
+          other.writer.Flush()
+        }
       }
 
       clog.Debug("keeping discoverable connection ", connection.RemoteAddr())
