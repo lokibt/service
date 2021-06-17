@@ -62,6 +62,13 @@ func connCheck(conn net.Conn) error {
     return sysErr
 }
 
+func waitForClose(conn net.Conn) {
+  for (connCheck(conn) == nil) {
+    time.Sleep(1000 * time.Millisecond)
+
+  }
+}
+
 func getConnectionId() (string) {
   nextConnId++
   return strconv.Itoa(nextConnId)
@@ -160,7 +167,7 @@ func handleConnection(connection net.Conn) {
       }
 
       clog.Debug("keeping discoverable connection ", connection.RemoteAddr())
-      for (connCheck(connection) == nil) { }
+      waitForClose(connection)
       clog.Debug("discoverable connection ", connection.RemoteAddr(), " closed")
 
     case 1: // LEAVE
@@ -191,7 +198,7 @@ func handleConnection(connection net.Conn) {
       writer.Flush()
 
       clog.Debug("keeping discovery connection ", connection.RemoteAddr())
-      for (connCheck(connection) == nil) { }
+      waitForClose(connection)
       clog.Debug("discovery connection ", connection.RemoteAddr(), " closed")
 
     case 3: // LISTEN
@@ -224,7 +231,7 @@ func handleConnection(connection net.Conn) {
       }()
 
       clog.Debug("keeping listen connection ", connection.RemoteAddr())
-      for (connCheck(connection) == nil) { }
+      waitForClose(connection)
       clog.Debug("listen connection ", connection.RemoteAddr(), " closed")
 
     case 4: // CONNECT
@@ -304,6 +311,7 @@ func handleConnection(connection net.Conn) {
           clog.Debug("client connection ", connection.RemoteAddr(), " timed out")
           return
         }
+        time.Sleep(1000 * time.Millisecond)
       }
       clog.Debug("client connection ", connection.RemoteAddr(), " closed")
 
