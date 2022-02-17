@@ -243,17 +243,6 @@ func handleConnection(connection net.Conn) {
       clog.Debug(connId)
 
       writer := bufio.NewWriter(connection)
-      clog.Debug("adding client connection...")
-      groupsM.Lock();
-      connections[connId] = &connSet{reader, writer, connection, true}
-      groupsM.Unlock();
-
-      defer func() {
-        clog.Debug("removing client connection...")
-        groupsM.Lock();
-        delete(connections, connId)
-        groupsM.Unlock();
-      }()
       
       groupsM.Lock();
       if _, exists := serving[addr]; exists == false {
@@ -281,16 +270,14 @@ func handleConnection(connection net.Conn) {
       service.available = false
       serving[addr][uuid] = service;
       clog.Debug("service has been marked as in use")
+      clog.Debug("adding client connection...")
+      connections[connId] = &connSet{reader, writer, connection, true}
       groupsM.Unlock();
 
       defer func() {
+        clog.Debug("removing client connection...")
         groupsM.Lock();
-        if _, exists := serving[addr][uuid]; exists == true {
-          service := serving[addr][uuid]
-          service.available = true
-          serving[addr][uuid] = service;
-          clog.Debug("service is not in use anymore")
-        }
+        delete(connections, connId)
         groupsM.Unlock();
       }()
 
@@ -309,14 +296,25 @@ func handleConnection(connection net.Conn) {
       for (connCheck(connection) == nil) {
         if (connections[connId].available && (time.Now().Unix() >= timeout)) {
           clog.Debug("client connection ", connection.RemoteAddr(), " timed out")
+          groupsM.Lock();
+          if _, exists := serving[addr][uuid]; exists == true {
+            service := serving[addr][uuid]
+            service.available = true
+            serving[addr][uuid] = service;
+            clog.Debug("service is not in use anymore")
+          }
+          groupsM.Unlock();
           return
         }
-        time.Sleep(1000 * time.Millisecond)
+        time.Sleep(100 * time.Millisecond)
       }
       clog.Debug("client connection ", connection.RemoteAddr(), " closed")
 
     case 5: // LINK
-      clog.Debug("linking client connection...")
+      addr := readTrimmedLine(reader)
+      clog.Debug(addr)
+      uuid := readTrimmedLine(reader)
+      clog.Debug(uuid)
       connId := readTrimmedLine(reader)
       clog.Debug(connId)
 
@@ -335,6 +333,14 @@ func handleConnection(connection net.Conn) {
       defer func() {
         clog.Debug("closing client connection ", clientConnection.RemoteAddr())
         clientConnection.Close()
+        groupsM.Lock();
+        if _, exists := serving[addr][uuid]; exists == true {
+          service := serving[addr][uuid]
+          service.available = true
+          serving[addr][uuid] = service;
+          clog.Debug("service is not in use anymore")
+        }
+        groupsM.Unlock();
       }()
 
       writeDone := make(chan bool)
