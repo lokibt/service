@@ -2,6 +2,7 @@ package main
 
 import (
   "bufio"
+  "errors"
   "io"
   "net"
   "os"
@@ -10,6 +11,7 @@ import (
   "syscall"
   "time"
   "sync"
+  "runtime/debug"
   
   log "github.com/sirupsen/logrus"
 )
@@ -48,7 +50,7 @@ func connCheck(conn net.Conn) error {
         n, _, err := syscall.Recvfrom(int(fd), buf, syscall.MSG_PEEK | syscall.MSG_DONTWAIT)
         switch {
           case n == 0 && err == nil:
-            sysErr = io.EOF
+            sysErr = errors.New("empty")
           case err == syscall.EAGAIN || err == syscall.EWOULDBLOCK:
             sysErr = nil
           default:
@@ -85,7 +87,7 @@ func handleConnection(connection net.Conn) {
     clog.Debug("closing connection ", connection.RemoteAddr())
     connection.Close()
     if r := recover(); r != nil {
-      clog.Debug("recovered from panic")
+      clog.Debug("recovered from panic\n" + string(debug.Stack()))
     }
   }()
 
