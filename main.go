@@ -248,6 +248,7 @@ func handleConnection(connection net.Conn) {
       if _, exists := serving[addr]; exists == false {
         clog.Info("address of service does not exist")
         writer.WriteString("fail\n")
+        writer.WriteString("address of service does not exist\n")
         writer.Flush()
         groupsM.Unlock();
         return
@@ -255,6 +256,7 @@ func handleConnection(connection net.Conn) {
       if _, exists := serving[addr][uuid]; exists == false {
         clog.Info("uuid of service does not exist")
         writer.WriteString("fail\n")
+        writer.WriteString("uuid of service does not exist\n")
         writer.Flush()
         groupsM.Unlock();
         return
@@ -262,6 +264,7 @@ func handleConnection(connection net.Conn) {
       if serving[addr][uuid].available == false {
         clog.Info("service is already in use")
         writer.WriteString("fail\n")
+        writer.WriteString("service is already in use\n")
         writer.Flush()
         groupsM.Unlock();
         return
